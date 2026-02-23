@@ -1,42 +1,44 @@
-# Bank Account Management API (Event Sourcing + CQRS)
+
+# Bank Account Management API using Event Sourcing and CQRS
 
 ## Overview
-This project implements a **Bank Account Management System** using **Event Sourcing** and **Command Query Responsibility Segregation (CQRS)**.
+This project presents a **Bank Account Management API** built using **Event Sourcing** and **Command Query Responsibility Segregation (CQRS)** patterns.
 
-Instead of storing only the current state, all changes are recorded as immutable events. Read models are built using projections, enabling fast queries and complete auditability.
+Rather than persisting only the latest state, every change to an account is recorded as an immutable event. Read-optimized models are generated through projections, allowing efficient queries while maintaining a complete audit trail.
 
 ---
 
 ## Architecture
 
 ### Event Sourcing
-- All state changes are stored in the `events` table.
-- The current state of an account is reconstructed by replaying events.
-- Snapshots are created after every **50 events** to optimize performance.
+- All domain changes are persisted as events in the `events` table.
+- Account state is derived by replaying events in sequence.
+- To improve performance, snapshots are generated after every **50 events**.
 
 ### CQRS (Command Query Responsibility Segregation)
-- **Command Side (Write Model):**
-  - Handles account creation, deposits, withdrawals, and closure.
-  - Stores events in the event store.
+- **Command Layer (Write Side):**
+  - Processes account creation, deposits, withdrawals, and account closure.
+  - Persists validated domain events into the event store.
 
-- **Query Side (Read Model):**
+- **Query Layer (Read Side):**
   - Uses projection tables:
     - `account_summaries`
     - `transaction_history`
-  - Provides fast and optimized read operations.
+  - Designed for fast and efficient read operations.
 
 ---
 
-## Tech Stack
+## Technology Stack
 
-- Node.js (Express)
+- Node.js with Express
 - PostgreSQL
-- Docker & Docker Compose
+- Docker and Docker Compose
 
 ---
 
 ## Project Structure
 ```
+
 bank-es-cqrs/
 │
 ├── docker-compose.yml
@@ -46,126 +48,141 @@ bank-es-cqrs/
 ├── README.md
 │
 ├── seeds/
-│ └── 001_schema.sql
+│   └── 001_schema.sql
 │
 └── src/
 └── index.js
+
 ```
 
 ---
 
-## Setup & Run
+## Setup and Execution
 
-### 1. Start the application
-
+### Start the application
 ```
+
 docker-compose up --build
+
 ```
 
-### 2. API Base URL
-
-The API will be available at:
+### API Base URL
+Once started, the API is accessible at:
 ```
-http://localhost:8080
+
+[http://localhost:8080](http://localhost:8080)
+
 ```
 
 ---
 
-## Environment Variables
-Example .env.example:
+## Environment Configuration
+Sample environment variables are provided in `.env.example`:
 
 ```
+
 API_PORT=8080
 DATABASE_URL=postgresql://user:password@db:5432/bank_db
 DB_USER=user
 DB_PASSWORD=password
 DB_NAME=bank_db
+
 ```
 
 ---
 
 ## API Endpoints
 
-### Command Endpoints (Write)
+### Command Endpoints (Write Operations)
 
-|  **Method**  |         **Endpoint**           |	  **Description**       |
-|--------------|--------------------------------|-------------------------- |
-|POST	       |   /api/accounts	            |      Create account       |
-|POST	       |  /api/accounts/{id}/deposit	|      Deposit money        |
-|POST	       |  /api/accounts/{id}/withdraw   |      Withdraw money       |
-|POST	       |  /api/accounts/{id}/close	    |      Close account        |
+| Method | Endpoint                       | Description        |
+|------- |--------------------------------|--------------------|
+| POST   | /api/accounts                  | Create account     |
+| POST   | /api/accounts/{id}/deposit     | Deposit funds      |
+| POST   | /api/accounts/{id}/withdraw    | Withdraw funds     |
+| POST   | /api/accounts/{id}/close       | Close account      |
 
 ---
-## Query Endpoints (Read)
 
-| Method | Endpoint                                  | Description                |
-| ------ | ----------------------------------------- | -------------------------- |
-| GET    | /api/accounts/{id}                        | Get account summary        |
-| GET    | /api/accounts/{id}/transactions           | Get paginated transactions |
-| GET    | /api/accounts/{id}/events                 | Get event stream           |
-| GET    | /api/accounts/{id}/balance-at/{timestamp} | Time-travel balance        |
+## Query Endpoints (Read Operations)
+
+| Method | Endpoint                                   | Description                 |
+|------- |-------------------------------------------|-----------------------------|
+| GET    | /api/accounts/{id}                         | Fetch account summary       |
+| GET    | /api/accounts/{id}/transactions            | Retrieve transactions       |
+| GET    | /api/accounts/{id}/events                  | Retrieve event history      |
+| GET    | /api/accounts/{id}/balance-at/{timestamp}  | Balance at specific time    |
 
 ---
 
 ## Administrative Endpoints
 
-| Method | Endpoint                 | Description         |
-| ------ | ------------------------ | ------------------- |
-| POST   | /api/projections/rebuild | Rebuild projections |
-| GET    | /api/projections/status  | Projection status   |
+| Method | Endpoint                  | Description                |
+|------- |---------------------------|----------------------------|
+| POST   | /api/projections/rebuild  | Rebuild all projections    |
+| GET    | /api/projections/status   | View projection status     |
 
 ---
 
 ## Snapshot Strategy
-
-    - A snapshot is created after every 50 events.
-    - Stored in the snapshots table.
-    - Helps avoid replaying the entire event stream.
+- A snapshot is created after every **50 events**.
+- Snapshots are stored in the `snapshots` table.
+- This minimizes the cost of replaying long event streams.
 
 ---
 
-## Example Usage
+## Example Requests
+
 ### Create Account
 ```
-curl -X POST http://localhost:8080/api/accounts \
--H "Content-Type: application/json" \
+
+curl -X POST [http://localhost:8080/api/accounts](http://localhost:8080/api/accounts) 
+-H "Content-Type: application/json" 
 -d '{"accountId":"acc-test-12345","ownerName":"Jane Doe","initialBalance":0,"currency":"USD"}'
+
 ```
 
-### Deposit Money
+### Deposit Funds
 ```
-curl -X POST http://localhost:8080/api/accounts/acc-test-12345/deposit \
--H "Content-Type: application/json" \
+
+curl -X POST [http://localhost:8080/api/accounts/acc-test-12345/deposit](http://localhost:8080/api/accounts/acc-test-12345/deposit) 
+-H "Content-Type: application/json" 
 -d '{"amount":100,"description":"deposit","transactionId":"tx1"}'
+
 ```
 
-### Get Account
+### Get Account Details
 ```
-curl http://localhost:8080/api/accounts/acc-test-12345
+
+curl [http://localhost:8080/api/accounts/acc-test-12345](http://localhost:8080/api/accounts/acc-test-12345)
+
 ```
 
 ---
 
-## Key Features
+## Key Capabilities
 
-- Event-sourced architecture
-- CQRS pattern implementation
-- Time-travel queries
-- Snapshot optimization
-- Idempotent transactions
+- Event-driven persistence model
+- Clear separation of read and write concerns
+- Support for time-based state reconstruction
+- Snapshot-based optimization
+- Idempotent transaction handling
 - Fully containerized deployment
 
 ---
 
-## How It Works
+## Processing Flow
 
-1. Commands generate events.
-2. Events are stored in the event store.
-3. Projections update read models.
-4. Queries read from optimized projections.
-5. Snapshots reduce replay cost.
+1. Client sends a command request.
+2. The command is validated and converted into an event.
+3. Events are stored in the event store.
+4. Projection handlers update read models.
+5. Queries are served from projection tables.
+6. Snapshots reduce event replay overhead.
 
 ---
 
-## Conclusion
-This system demonstrates how Event Sourcing + CQRS can be used to build scalable, auditable, and reliable backend systems for financial applications.
+## Summary
+This project demonstrates a practical implementation of **Event Sourcing** and **CQRS**, showcasing how these patterns can be applied to build scalable, auditable, and reliable backend systems, particularly for financial and transaction-heavy applications.
+
+
