@@ -1,45 +1,59 @@
+# Bank Account Management API  
+## Event Sourcing + CQRS Implementation
 
-# Bank Account Management API using Event Sourcing and CQRS
+---
 
 ## Overview
-This project presents a **Bank Account Management API** built using **Event Sourcing** and **Command Query Responsibility Segregation (CQRS)** patterns.
 
-Rather than persisting only the latest state, every change to an account is recorded as an immutable event. Read-optimized models are generated through projections, allowing efficient queries while maintaining a complete audit trail.
+This project implements a Bank Account Management API using **Event Sourcing** and **Command Query Responsibility Segregation (CQRS)**.
+
+Instead of storing only the latest account state, every change is persisted as an immutable event. Read-optimized projections are built from these events, allowing efficient queries while maintaining full auditability.
 
 ---
 
 ## Architecture
 
 ### Event Sourcing
-- All domain changes are persisted as events in the `events` table.
-- Account state is derived by replaying events in sequence.
-- To improve performance, snapshots are generated after every **50 events**.
 
-### CQRS (Command Query Responsibility Segregation)
-- **Command Layer (Write Side):**
-  - Processes account creation, deposits, withdrawals, and account closure.
-  - Persists validated domain events into the event store.
+- All state changes are stored in the `events` table.
+- Account state is reconstructed by replaying events.
+- Events are immutable and sequentially ordered.
+- Time-travel queries are supported.
+- Snapshots are created after every 50 events to improve replay performance.
 
-- **Query Layer (Read Side):**
-  - Uses projection tables:
-    - `account_summaries`
-    - `transaction_history`
-  - Designed for fast and efficient read operations.
+### CQRS
+
+#### Command Side (Write Model)
+- Handles:
+  - Account creation
+  - Deposit
+  - Withdrawal
+  - Account closure
+- Validates business rules
+- Persists domain events to the event store
+
+#### Query Side (Read Model)
+- Uses projection tables:
+  - `account_summaries`
+  - `transaction_history`
+- Serves optimized read requests
+- Can be fully rebuilt from the event store
 
 ---
 
 ## Technology Stack
 
-- Node.js with Express
+- Node.js (Express)
 - PostgreSQL
-- Docker and Docker Compose
+- Docker
+- Docker Compose
 
 ---
 
 ## Project Structure
-```
 
-bank-es-cqrs/
+```
+bank-account-cqrs-api/
 │
 ├── docker-compose.yml
 ├── Dockerfile
@@ -51,138 +65,164 @@ bank-es-cqrs/
 │   └── 001_schema.sql
 │
 └── src/
-└── index.js
-
+    └── index.js
 ```
 
 ---
 
-## Setup and Execution
+## Running the Application
 
-### Start the application
+### Start Containers
+
+```bash
+docker-compose up -d --build
 ```
 
-docker-compose up --build
+Check running containers:
 
+```bash
+docker ps
 ```
 
-### API Base URL
-Once started, the API is accessible at:
+API Base URL:
+
 ```
-
-[http://localhost:8080](http://localhost:8080)
-
+http://localhost:8080
 ```
 
 ---
 
-## Environment Configuration
-Sample environment variables are provided in `.env.example`:
+## Demo Flow (Used in Recording)
 
+### 1. Create Account
+
+```bash
+curl -X POST http://localhost:8080/api/accounts \
+-H "Content-Type: application/json" \
+-d '{"accountId":"acc-demo-1","ownerName":"John","initialBalance":0,"currency":"USD"}'
 ```
 
-API_PORT=8080
-DATABASE_URL=postgresql://user:password@db:5432/bank_db
-DB_USER=user
-DB_PASSWORD=password
-DB_NAME=bank_db
+### 2. Deposit Money
 
+```bash
+curl -X POST http://localhost:8080/api/accounts/acc-demo-1/deposit \
+-H "Content-Type: application/json" \
+-d '{"amount":100,"description":"deposit","transactionId":"tx1"}'
+```
+
+### 3. Withdraw Money
+
+```bash
+curl -X POST http://localhost:8080/api/accounts/acc-demo-1/withdraw \
+-H "Content-Type: application/json" \
+-d '{"amount":50,"description":"withdraw","transactionId":"tx2"}'
+```
+
+### 4. Get Current Account State (Projection)
+
+```bash
+curl http://localhost:8080/api/accounts/acc-demo-1
+```
+
+### 5. Retrieve Event Stream
+
+```bash
+curl http://localhost:8080/api/accounts/acc-demo-1/events
+```
+
+### 6. Time-Travel Query
+
+Before any events:
+
+```bash
+curl http://localhost:8080/api/accounts/acc-demo-1/balance-at/2026-02-28T04:30:00Z
+```
+
+Between deposit and withdrawal:
+
+```bash
+curl http://localhost:8080/api/accounts/acc-demo-1/balance-at/2026-02-28T04:33:10Z
+```
+
+### 7. Projection Rebuild
+
+Delete projections manually:
+
+```bash
+docker exec -it bank-account-cqrs-api-main-db-1 psql -U user -d bank_db
+```
+
+Inside psql:
+
+```sql
+DELETE FROM account_summaries;
+DELETE FROM transaction_history;
+\q
+```
+
+Trigger rebuild:
+
+```bash
+curl -X POST http://localhost:8080/api/projections/rebuild
+```
+
+Verify:
+
+```bash
+curl http://localhost:8080/api/accounts/acc-demo-1
 ```
 
 ---
 
 ## API Endpoints
 
-### Command Endpoints (Write Operations)
+### Command Endpoints
 
-| Method | Endpoint                       | Description        |
-|------- |--------------------------------|--------------------|
-| POST   | /api/accounts                  | Create account     |
-| POST   | /api/accounts/{id}/deposit     | Deposit funds      |
-| POST   | /api/accounts/{id}/withdraw    | Withdraw funds     |
-| POST   | /api/accounts/{id}/close       | Close account      |
+| Method | Endpoint                        | Description |
+|--------|--------------------------------|-------------|
+| POST   | /api/accounts                   | Create account |
+| POST   | /api/accounts/{id}/deposit      | Deposit money |
+| POST   | /api/accounts/{id}/withdraw     | Withdraw money |
+| POST   | /api/accounts/{id}/close        | Close account |
 
----
+### Query Endpoints
 
-## Query Endpoints (Read Operations)
+| Method | Endpoint                                   | Description |
+|--------|--------------------------------------------|-------------|
+| GET    | /api/accounts/{id}                         | Account summary |
+| GET    | /api/accounts/{id}/transactions            | Transaction history |
+| GET    | /api/accounts/{id}/events                  | Event stream |
+| GET    | /api/accounts/{id}/balance-at/{timestamp}  | Time-travel balance |
 
-| Method | Endpoint                                   | Description                 |
-|------- |-------------------------------------------|-----------------------------|
-| GET    | /api/accounts/{id}                         | Fetch account summary       |
-| GET    | /api/accounts/{id}/transactions            | Retrieve transactions       |
-| GET    | /api/accounts/{id}/events                  | Retrieve event history      |
-| GET    | /api/accounts/{id}/balance-at/{timestamp}  | Balance at specific time    |
+### Administrative Endpoints
 
----
-
-## Administrative Endpoints
-
-| Method | Endpoint                  | Description                |
-|------- |---------------------------|----------------------------|
-| POST   | /api/projections/rebuild  | Rebuild all projections    |
-| GET    | /api/projections/status   | View projection status     |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST   | /api/projections/rebuild | Rebuild read models |
+| GET    | /api/projections/status  | Projection status |
 
 ---
 
 ## Snapshot Strategy
-- A snapshot is created after every **50 events**.
-- Snapshots are stored in the `snapshots` table.
-- This minimizes the cost of replaying long event streams.
 
----
-
-## Example Requests
-
-### Create Account
-```
-
-curl -X POST [http://localhost:8080/api/accounts](http://localhost:8080/api/accounts) 
--H "Content-Type: application/json" 
--d '{"accountId":"acc-test-12345","ownerName":"Jane Doe","initialBalance":0,"currency":"USD"}'
-
-```
-
-### Deposit Funds
-```
-
-curl -X POST [http://localhost:8080/api/accounts/acc-test-12345/deposit](http://localhost:8080/api/accounts/acc-test-12345/deposit) 
--H "Content-Type: application/json" 
--d '{"amount":100,"description":"deposit","transactionId":"tx1"}'
-
-```
-
-### Get Account Details
-```
-
-curl [http://localhost:8080/api/accounts/acc-test-12345](http://localhost:8080/api/accounts/acc-test-12345)
-
-```
-
----
-
-## Key Capabilities
-
-- Event-driven persistence model
-- Clear separation of read and write concerns
-- Support for time-based state reconstruction
-- Snapshot-based optimization
-- Idempotent transaction handling
-- Fully containerized deployment
+- A snapshot is created after every 50 events.
+- Stored in the `snapshots` table.
+- Reduces aggregate reconstruction time.
 
 ---
 
 ## Processing Flow
 
-1. Client sends a command request.
-2. The command is validated and converted into an event.
-3. Events are stored in the event store.
-4. Projection handlers update read models.
-5. Queries are served from projection tables.
-6. Snapshots reduce event replay overhead.
+1. Client sends a command.
+2. Command is validated.
+3. An event is generated and stored.
+4. Projections update read models.
+5. Queries read from projection tables.
+6. Snapshots optimize replay performance.
 
 ---
 
 ## Summary
-This project demonstrates a practical implementation of **Event Sourcing** and **CQRS**, showcasing how these patterns can be applied to build scalable, auditable, and reliable backend systems, particularly for financial and transaction-heavy applications.
 
+This implementation demonstrates a practical application of Event Sourcing and CQRS for building scalable, auditable, and reliable financial backend systems.
 
